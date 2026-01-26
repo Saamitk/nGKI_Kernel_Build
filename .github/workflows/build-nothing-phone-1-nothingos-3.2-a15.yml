@@ -25,7 +25,7 @@ env:
   GCC_32_BRANCH : "android12L-release"
 
   DEFCONFIG_SOURCE: ""
-  DEFCONFIG_NAME : "gki_defconfig"
+  DEFCONFIG_NAME : "vendor/lahaina-gki_defconfig"
   DEFCONFIG_ORIGIN_IMAGE: ""
   DEFCONFIG_FROM_BOOT: false
 
@@ -83,7 +83,7 @@ env:
   BUILD_DEBUGGER: "false" # Output build errors.
   SKIP_PATCH: "false" # Ignore errors found in Patch Debugger.
 
-  BUILD_OTHER_CONFIG: "true" # Merge config files.
+  BUILD_OTHER_CONFIG: "false" # Merge config files.
   MERGE_CONFIG_FILES: "vendor/lahaina_QGKI.config"
 
   FREE_MORE_SPACE: "false" # if u want get more space, enabled it.
@@ -118,6 +118,9 @@ jobs:
         run: |
           # Only ${{ env.DEVICE_NAME }} use it.
           cd $GITHUB_WORKSPACE/device_kernel
+          # Init defconfig
+          chmod +x scripts/gki/generate_defconfig.sh
+          scripts/gki/generate_defconfig.sh lahaina-gki_defconfig
           # Add device tree
           echo "⬇️ Cloning Device Tree..."
           git clone https://github.com/NothingOSS/android_kernel_devicetree_nothing_sm7325.git -b "$KERNEL_BRANCH" arch/arm64/boot/dts/vendor
