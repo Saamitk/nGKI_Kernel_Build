@@ -118,12 +118,21 @@ jobs:
         run: |
           # Only ${{ env.DEVICE_NAME }} use it.
           cd $GITHUB_WORKSPACE/device_kernel
+          
           # Init defconfig
           chmod +x scripts/gki/generate_defconfig.sh
           scripts/gki/generate_defconfig.sh lahaina-qgki_defconfig
+          
           # Add device tree
           echo "⬇️ Cloning Device Tree..."
           git clone https://github.com/NothingOSS/android_kernel_devicetree_nothing_sm7325.git -b "$KERNEL_BRANCH" arch/arm64/boot/dts/vendor
+
+          # Fix symlinks
+          rm -f techpack/audio/soc/pinctrl-utils.h
+          rm -f techpack/audio/soc/core.h
+          
+          ln -s drivers/pinctrl/pinctrl-utils.h techpack/audio/soc/pinctrl-utils.h
+          ln -s drivers/pinctrl/core.h techpack/audio/soc/core.h
 
       - name: 🧰 Patch Kernel of Re:Kernel
         uses: ./.github/workflows/patch-rekernel
