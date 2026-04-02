@@ -15,7 +15,7 @@ env:
   KERNEL_SOURCE : "https://github.com/LineageOS/android_kernel_nothing_sm7325.git"
   KERNEL_BRANCH : "lineage-23.0"
 
-  CLANG_SOURCE : "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/mirror-goog-main-llvm-toolchain-source/clang-r574158.tar.gz"
+  CLANG_SOURCE : "https://github.com/bachnxuan/aosp_clang_mirror/releases/download/clang-r574158-14475230/clang-r574158.tar.gz"
   CLANG_BRANCH : ""
 
   GCC_GNU : false
@@ -32,11 +32,11 @@ env:
   KERNELSU_SOURCE : "https://raw.githubusercontent.com/cyberc3dr/KernelSU-Next/refs/heads/pershoot-susfs-legacy/kernel/setup.sh"
   KERNELSU_BRANCH : "pershoot-susfs-legacy"
 
-  KERNELSU_AUTO_GET : "false" # if u want easy setting kernelsu, u can true.
-  KERNELSU_AUTO_FORK : "rsuntk" # magic, rsuntk, next, resukisu and sukisu
+  KERNELSU_AUTO_GET : "true" # if u want easy setting kernelsu, u can true.
+  KERNELSU_AUTO_FORK : "resukisu" # magic, rsuntk, next, resukisu and sukisu
 
   SUSFS_ENABLE : true
-  SUSFS_FIXED : true
+  SUSFS_FIXED : false
 
   AK3_SOURCE : "https://github.com/osm0sis/AnyKernel3.git"
   AK3_BRANCH : "master"
@@ -58,8 +58,8 @@ env:
   PATCHES_SOURCE: "cyberc3dr/NonGKI_Kernel_Patches" # [your_name]/[your_patch] -> gooder123/NonGKI_Patcher
   PATCHES_BRANCH: "nothing_kernel" # [your_branch] -> main
 
-  SUSFS_FOLDER_FIXED: "np1" # Fill in your patch prefix directory here. Leave it blank if there isn't one. -> your_folder
-  SUSFS_PATCH_FIXED: "pershoot-susfs" # Fill in your patches here. If there are multiple patches, please separate them with a comma. Leave it blank if there isn't one. -> patch1,patch2
+  SUSFS_FOLDER_FIXED: "" # Fill in your patch prefix directory here. Leave it blank if there isn't one. -> your_folder
+  SUSFS_PATCH_FIXED: "" # Fill in your patches here. If there are multiple patches, please separate them with a comma. Leave it blank if there isn't one. -> patch1,patch2
 
   REKERNEL_ENABLE: "false" # if u need Re:Kernel.
 
