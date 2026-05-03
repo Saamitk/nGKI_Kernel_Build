@@ -84,12 +84,12 @@ jobs:
       - name: 🔗 Patch for no-kprobe
         uses: ./.github/workflows/patch-no-kprobe
 
-      - name: 🪛 Extra Kernel Options (Auto‑detect Manual Hook from Kconfig)
+      - name: 🪛 Extra Kernel Options (Clean Build)
         run: |
           set -e
           cd $GITHUB_WORKSPACE/device_kernel
 
-          # 1. 确保 ReSukiSU 源码在 drivers/kernelsu（build‑ready 可能已执行 setup.sh）
+          # 1. 干净移动源码
           if [ -d "KernelSU" ]; then
             rm -rf drivers/kernelsu
             mv KernelSU/kernel drivers/kernelsu
@@ -101,56 +101,23 @@ jobs:
           fi
           [ ! -d "drivers/kernelsu" ] && { echo "ERROR: drivers/kernelsu missing!"; exit 1; }
 
-          # 2. 动态检测 Kconfig 中 Manual Hook 的正确宏名
-          MANUAL_CONF=""
-          # 先找形如 "config KSU_MANUAL_HOOK" 或 "config KSU_HOOK_MANUAL" 的条目
-          if [ -f drivers/kernelsu/Kconfig ]; then
-            MANUAL_CONF=$(awk '/^config KSU.*[Mm]anual/{print $2}' drivers/kernelsu/Kconfig | head -1)
-          fi
-          # 如果没找到，尝试在内核树其它地方搜索（有时候 Hook 配置在 arch/arm64/Kconfig 或 kernel/Kconfig.hook）
-          if [ -z "$MANUAL_CONF" ]; then
-            MANUAL_CONF=$(find . -name "Kconfig*" -exec grep -l "Manual" {} \; | xargs awk '/^config KSU.*[Mm]anual/{print $2}' | head -1)
-          fi
-          # 保底：使用最常见的命名
-          if [ -z "$MANUAL_CONF" ]; then
-            echo "WARNING: Could not auto‑detect Manual Hook config name, falling back to CONFIG_KSU_MANUAL_HOOK"
-            MANUAL_CONF="CONFIG_KSU_MANUAL_HOOK"
-          fi
-          echo "Using Manual Hook config: ${MANUAL_CONF}=y"
-
-          # 3. 注入必需配置（包括 Manual Hook、SUSFS、kallsyms）
+          # 2. 仅注入配置，绝不手动改 drivers/Makefile
           DEFCONFIG="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
-          cat >> "$DEFCONFIG" << EOF
+          cat >> "$DEFCONFIG" << 'EOF'
           CONFIG_KALLSYMS=y
           CONFIG_KALLSYMS_ALL=y
           CONFIG_KSU=y
+          CONFIG_KSU_MANUAL_HOOK=y
           CONFIG_KSU_SUSFS=y
-          ${MANUAL_CONF}=y
           # CONFIG_KSU_WITH_KPROBES is not set
           EOF
 
-          # 4. 生成最终 .config
+          # 3. 重新生成 .config（olddefconfig 会自动处理依赖，并把 drivers/kernelsu 拉入编译）
           mkdir -p out
           make ARCH=arm64 O=out ${{ env.DEFCONFIG_NAME }}
           make ARCH=arm64 O=out olddefconfig
 
-          # 5. 确保 drivers/kernelsu 会被编译
-          if ! grep -q "kernelsu/" drivers/Makefile; then
-            echo 'obj-y += kernelsu/' >> drivers/Makefile
-          fi
-
-          # 6. 验证关键符号（防错机制）
-          echo "Checking for critical symbols in source..."
-          if grep -rq "ksu_is_init_rc_hook_enabled" drivers/kernelsu/; then
-            echo "✓ ksu_is_init_rc_hook_enabled found"
-          else
-            echo "⚠ Symbol missing, forcing all C files to be compiled"
-            find drivers/kernelsu -name "*.c" | while read f; do
-              echo "obj-y += ${f%.c}.o" >> drivers/kernelsu/Makefile
-            done
-          fi
-
-          echo "Extra Kernel Options applied successfully."
+          echo "Extra Kernel Options done. drivers/Makefile left untouched."
 
       - name: 🧰 Patch Kernel of Re:Kernel
         uses: ./.github/workflows/patch-rekernel
