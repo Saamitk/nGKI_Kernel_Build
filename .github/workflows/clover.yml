@@ -1,22 +1,19 @@
-name: Build Kernel for MiPad4 (clover)
+name: Build Kernel for MiPad4 (clover) with ReSukiSU + Manual Hook
 
 on:
   workflow_call:
   workflow_dispatch:
 
 env:
-  # 1. 设备基础配置
   DEVICE_NAME : "MiPad4"
   DEVICE_CODENAME : "clover"
 
-  # 2. 编译指令与内核源码
   CUSTOM_CMDS : "CLANG_TRIPLE=aarch64-linux-gnu-"
   EXTRA_CMDS : "LD=ld.lld LLVM=1 LLVM_IAS=1"
 
   KERNEL_SOURCE : "https://github.com/pix106/android_kernel_xiaomi_southwest-4.19.git"
   KERNEL_BRANCH : "main"
 
-  # 3. 工具链配置 (LLVM 19.1.7)
   CLANG_SOURCE : "https://github.com/llvm/llvm-project/releases/download/llvmorg-19.1.7/LLVM-19.1.7-Linux-X64.tar.xz"
   CLANG_BRANCH : ""
 
@@ -26,46 +23,40 @@ env:
   GCC_32_SOURCE : "https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/x86/x86_64-linux-android-4.9.git"
   GCC_32_BRANCH : "android12L-release"
 
-  # 4. 编译目标文件
   DEFCONFIG_SOURCE: ""
   DEFCONFIG_NAME : "clover_defconfig"
   DEFCONFIG_ORIGIN_IMAGE: ""
   DEFCONFIG_FROM_BOOT: false
 
-  # 5. KernelSU 与 SUSFS 配置
-  KERNELSU_SOURCE : "https://raw.githubusercontent.com/ShirkNeko/SukiSU-Ultra/refs/heads/susfs-main/kernel/setup.sh"
-  KERNELSU_BRANCH : "susfs-main"
-  KERNELSU_NAME : "KernelSU"
-  
+  KERNELSU_SOURCE : "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh"
+  KERNELSU_BRANCH : "main"
+  KERNELSU_NAME : "ReSukiSU"
   KERNELSU_AUTO_GET : "true"
-  KERNELSU_AUTO_FORK : "sukisu" 
-  KERNELSU_METHOD: "shell" 
+  KERNELSU_AUTO_FORK : "resukisu"
+  KERNELSU_METHOD: "shell"
 
   SUSFS_ENABLE : true
   SUSFS_FIXED : true
 
-  # 6. 补丁仓库 (Patch)
   PATCHES_SOURCE: "PeterTea5822/NonGKI_Kernel_Patches"
   PATCHES_BRANCH: "main"
   SUSFS_FOLDER_FIXED: ""
   SUSFS_PATCH_FIXED: ""
 
-  # 7. 打包配置 (AnyKernel3)
   AK3_SOURCE : "https://github.com/osm0sis/AnyKernel3.git"
   AK3_BRANCH : "master"
   BOOT_SOURCE : "https://github.com/boot_author/android_kernel_codename/raw/refs/heads/main/rom/source_imgs/boot.img"
-  
+
   PACK_METHOD: "Anykernel3"
   PACK_KMODULES: "false"
 
-  # 8. 其他功能开关
   PYTHON_VERSION: "3"
   ROM_TEXT : "lineageos_a15"
   NEED_DTBO : false
   NEED_SAFE_DTBO : false
   REKERNEL_ENABLE: "false"
-  HOOK_METHOD: "syscall"
-  KERNEL_PATCH: "true" # 开启此项以修复 4.19 内核底层函数导出
+  HOOK_METHOD: "manual"          # 仍设 manual，但具体宏由脚本从 Kconfig 读取
+  KERNEL_PATCH: "true"
   KPM_ENABLE: "false"
   KPM_INLINE: "false"
   HIDE_STUFF: "false"
@@ -76,7 +67,7 @@ jobs:
   build-kernel:
     name: Build Kernel
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: ⏰ Checkout repository
         uses: actions/checkout@v6
@@ -84,7 +75,7 @@ jobs:
       - name: ⌛️ Compilation environment preparation
         uses: ./.github/workflows/build-env
 
-      - name: ⚙️ Get neccssary tools
+      - name: ⚙️ Get necessary tools
         uses: ./.github/workflows/build-ready
 
       - name: 🪝 Patch Kernel of SUSFS
@@ -93,14 +84,12 @@ jobs:
       - name: 🔗 Patch for no-kprobe
         uses: ./.github/workflows/patch-no-kprobe
 
-      - name: 🪛 Extra Kernel Options
+      - name: 🪛 Extra Kernel Options (Auto‑detect Manual Hook from Kconfig)
         run: |
           set -e
           cd $GITHUB_WORKSPACE/device_kernel
 
-          # ============================================
-          # 1. 移动 KernelSU 源码到标准位置
-          # ============================================
+          # 1. 确保 ReSukiSU 源码在 drivers/kernelsu（build‑ready 可能已执行 setup.sh）
           if [ -d "KernelSU" ]; then
             rm -rf drivers/kernelsu
             mv KernelSU/kernel drivers/kernelsu
@@ -110,87 +99,59 @@ jobs:
             mv kernelsu/kernel drivers/kernelsu
             rm -rf kernelsu
           fi
-
           [ ! -d "drivers/kernelsu" ] && { echo "ERROR: drivers/kernelsu missing!"; exit 1; }
 
-          # ============================================
-          # 2. 注入 defconfig（同样保留，以防后续重新生成）
-          # ============================================
+          # 2. 动态检测 Kconfig 中 Manual Hook 的正确宏名
+          MANUAL_CONF=""
+          # 先找形如 "config KSU_MANUAL_HOOK" 或 "config KSU_HOOK_MANUAL" 的条目
+          if [ -f drivers/kernelsu/Kconfig ]; then
+            MANUAL_CONF=$(awk '/^config KSU.*[Mm]anual/{print $2}' drivers/kernelsu/Kconfig | head -1)
+          fi
+          # 如果没找到，尝试在内核树其它地方搜索（有时候 Hook 配置在 arch/arm64/Kconfig 或 kernel/Kconfig.hook）
+          if [ -z "$MANUAL_CONF" ]; then
+            MANUAL_CONF=$(find . -name "Kconfig*" -exec grep -l "Manual" {} \; | xargs awk '/^config KSU.*[Mm]anual/{print $2}' | head -1)
+          fi
+          # 保底：使用最常见的命名
+          if [ -z "$MANUAL_CONF" ]; then
+            echo "WARNING: Could not auto‑detect Manual Hook config name, falling back to CONFIG_KSU_MANUAL_HOOK"
+            MANUAL_CONF="CONFIG_KSU_MANUAL_HOOK"
+          fi
+          echo "Using Manual Hook config: ${MANUAL_CONF}=y"
+
+          # 3. 注入必需配置（包括 Manual Hook、SUSFS、kallsyms）
           DEFCONFIG="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
-          sed -i '/^CONFIG_KSU/d; /^CONFIG_SUSFS/d; /^CONFIG_JUMP_LABEL/d; /^CONFIG_LOCALVERSION_AUTO/d; /^CONFIG_SUKISU/d' "$DEFCONFIG"
-          cat >> "$DEFCONFIG" << 'EOF'
+          cat >> "$DEFCONFIG" << EOF
+          CONFIG_KALLSYMS=y
+          CONFIG_KALLSYMS_ALL=y
           CONFIG_KSU=y
           CONFIG_KSU_SUSFS=y
-          CONFIG_KSU_HOOK_RC=y
-          CONFIG_KSU_HOOK_INPUT=y
-          CONFIG_KSU_HOOK_PROCESS=y
-          CONFIG_KSU_HOOK_SCHED=y
-          CONFIG_SUSFS=y
-          CONFIG_SUSFS_HOOK_RC=y
-          CONFIG_SUSFS_HOOK_INPUT=y
-          CONFIG_JUMP_LABEL=y
-          CONFIG_LOCALVERSION_AUTO=n
-          CONFIG_SUKISU=y
+          ${MANUAL_CONF}=y
+          # CONFIG_KSU_WITH_KPROBES is not set
           EOF
 
-          # ============================================
-          # 3. 重新生成 .config（关键）
-          # ============================================
+          # 4. 生成最终 .config
           mkdir -p out
           make ARCH=arm64 O=out ${{ env.DEFCONFIG_NAME }}
           make ARCH=arm64 O=out olddefconfig
 
-          # ============================================
-          # 4. 暴力强制 .config 中 KSU 相关选项无条件开启
-          # ============================================
-          echo "Forcing KSU configs in out/.config..."
-
-          # 删除可能关闭的项，然后强制写入
-          sed -i '/^CONFIG_KSU/d; /^CONFIG_SUSFS/d; /^CONFIG_JUMP_LABEL/d; /^CONFIG_LOCALVERSION_AUTO/d; /^CONFIG_SUKISU/d' out/.config
-
-          cat >> out/.config << 'EOF'
-          CONFIG_KSU=y
-          CONFIG_KSU_SUSFS=y
-          CONFIG_KSU_HOOK_RC=y
-          CONFIG_KSU_HOOK_INPUT=y
-          CONFIG_KSU_HOOK_PROCESS=y
-          CONFIG_KSU_HOOK_SCHED=y
-          CONFIG_SUSFS=y
-          CONFIG_SUSFS_HOOK_RC=y
-          CONFIG_SUSFS_HOOK_INPUT=y
-          CONFIG_JUMP_LABEL=y
-          CONFIG_LOCALVERSION_AUTO=n
-          CONFIG_SUKISU=y
-          EOF
-
-          # 再次运行 olddefconfig 解决可能的依赖（不会关闭我们刚加的键）
-          make ARCH=arm64 O=out olddefconfig
-
-          # ============================================
-          # 5. 确保 drivers/Makefile 包含 kernelsu 目录
-          # ============================================
-          if ! grep -q 'kernelsu/' drivers/Makefile; then
+          # 5. 确保 drivers/kernelsu 会被编译
+          if ! grep -q "kernelsu/" drivers/Makefile; then
             echo 'obj-y += kernelsu/' >> drivers/Makefile
           fi
 
-          # ============================================
-          # 6. 再次暴力修改 drivers/kernelsu/Makefile
-          #    将所有 obj-$(CONFIG_xxx) 替换为 obj-y
-          # ============================================
-          echo "Force changing obj-\$(CONFIG...) to obj-y in kernelsu Makefiles..."
-          find drivers/kernelsu -name 'Makefile' -exec sed -i 's/obj-\$(CONFIG_KSU)/obj-y/g; s/obj-\$(CONFIG_KSU_SUSFS)/obj-y/g; s/obj-\$(CONFIG_SUKISU)/obj-y/g' {} +
+          # 6. 验证关键符号（防错机制）
+          echo "Checking for critical symbols in source..."
+          if grep -rq "ksu_is_init_rc_hook_enabled" drivers/kernelsu/; then
+            echo "✓ ksu_is_init_rc_hook_enabled found"
+          else
+            echo "⚠ Symbol missing, forcing all C files to be compiled"
+            find drivers/kernelsu -name "*.c" | while read f; do
+              echo "obj-y += ${f%.c}.o" >> drivers/kernelsu/Makefile
+            done
+          fi
 
-          # ============================================
-          # 7. 验证配置是否真的生效
-          # ============================================
-          echo ""
-          echo "=== Final .config KSU settings ==="
-          grep -E "CONFIG_KSU|CONFIG_SUSFS|CONFIG_JUMP_LABEL" out/.config || echo "WARNING: KSU configs not found!"
-          echo ""
-          echo "=== Check if kernelsu objects will be built ==="
-          grep -r "kernelsu" out/Makefile 2>/dev/null || true
-          echo ""
-          echo "Extra Kernel Options Done."
+          echo "Extra Kernel Options applied successfully."
+
       - name: 🧰 Patch Kernel of Re:Kernel
         uses: ./.github/workflows/patch-rekernel
 
