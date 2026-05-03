@@ -97,25 +97,32 @@ jobs:
         run: |
           cd $GITHUB_WORKSPACE/device_kernel
           
-          # 修复 SukiSU 路径映射：将根目录的 kernelsu 软链接到 drivers
+          # 1. 路径修正：确保 SukiSU 文件夹在正确的编译位置
+          # shell 模式下，SukiSU 可能会被下载到内核根目录
           if [ -d "kernelsu" ]; then
-            echo "Linking kernelsu to drivers..."
-            ln -sf ../kernelsu/kernel drivers/kernelsu
+            echo "Found kernelsu in root, linking to drivers..."
+            rm -rf drivers/kernelsu
+            cp -r kernelsu drivers/
           fi
 
-          # 强制在 Makefile 层面激活编译目标
-          grep -q "obj-\$(CONFIG_KSU) += kernelsu/" drivers/Makefile || echo 'obj-$(CONFIG_KSU) += kernelsu/' >> drivers/Makefile
+          # 2. 强制 Makefile 包含 kernelsu 目录
+          # 使用 'obj-y' 而不是 'obj-$(CONFIG_KSU)'，强行让编译器进入该目录
+          sed -i '/obj-y += drivers\//i obj-y += kernelsu/' drivers/Makefile || echo 'obj-y += kernelsu/' >> drivers/Makefile
           
-          # 强制注入 Kconfig，防止编译系统跳过该目录
-          grep -q "source \"drivers/kernelsu/Kconfig\"" drivers/Kconfig || sed -i '/endmenu/i source "drivers/kernelsu/Kconfig"' drivers/Kconfig
+          # 3. 强制 Kconfig 注入
+          grep -q "drivers/kernelsu/Kconfig" drivers/Kconfig || sed -i '/endmenu/i source "drivers/kernelsu/Kconfig"' drivers/Kconfig
 
-          # 如果使用了 SUSFS，强制内核对象为必选，防止符号链接失败
-          if [ "${{ env.SUSFS_ENABLE }}" == "true" ]; then
-            echo "Ensuring SUSFS symbols are linked..."
-            # 这一步是为了防止 CONFIG_KSU 未被正确设为 y 导致跳过编译
-            sed -i 's/obj-$(CONFIG_KSU)/obj-y/g' drivers/kernelsu/Makefile 2>/dev/null || true
+          # 4. 解决 SUSFS 符号链接问题
+          # 这一步修复 'susfs_run_sus_path_loop' 找不到的问题
+          if [ -d "drivers/kernelsu" ]; then
+            echo "Modifying KernelSU Makefile for SUSFS symbols..."
+            # 将变量控制改为强制编译
+            sed -i 's/obj-\$(CONFIG_KSU)/obj-y/g' drivers/kernelsu/Makefile 2>/dev/null || true
           fi
 
+          # 5. 修复 4.19 内核特定宏定义（针对 undefined symbol: ..._key_false）
+          # 有时候跳转表（jump table）需要特定的宏支持
+          echo "CONFIG_JUMP_LABEL=y" >> arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
       - name: 🧰 Patch Kernel of Re:Kernel
         uses: ./.github/workflows/patch-rekernel
 
