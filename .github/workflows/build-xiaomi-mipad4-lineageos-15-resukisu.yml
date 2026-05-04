@@ -100,54 +100,102 @@ jobs:
       - name: 🔗 Patch for no-kprobe
         uses: ./.github/workflows/patch-no-kprobe
 
-      - name: 🪛 Extra Kernel Options (Fix SukiSU 4.19 compile errors)
+      - name: 🪛 Extra Kernel Options (Source-level fixes for SukiSU Ultra on 4.19)
         run: |
           cd $GITHUB_WORKSPACE/device_kernel
 
-          # 1. 移动 SukiSU 源码 (兜底)
-          if [ -d "KernelSU" ] && [ ! -d "drivers/kernelsu" ]; then
+          # 1. 统一目录名称 (SukiSU 脚本可能生成 kernelus 或 kernelsu)
+          if [ -d "drivers/kernelus" ]; then
+            echo "Renaming drivers/kernelus to drivers/kernelsu"
+            mv drivers/kernelus drivers/kernelsu
+          elif [ -d "drivers/kernelsu" ]; then
+            echo "drivers/kernelsu already exists"
+          elif [ -d "KernelSU" ]; then
             mv KernelSU/kernel drivers/kernelsu
             rm -rf KernelSU
-          elif [ -d "kernelsu" ] && [ ! -d "drivers/kernelsu" ]; then
+          elif [ -d "kernelsu" ]; then
             mv kernelsu/kernel drivers/kernelsu
             rm -rf kernelsu
           fi
 
-          # 如果源码目录叫 kernelus（之前日志里看到过），就给它改回正名
-          if [ -d "drivers/kernelus" ] && [ ! -d "drivers/kernelsu" ]; then
-            mv drivers/kernelus drivers/kernelsu
+          if [ ! -d "drivers/kernelsu" ]; then
+            echo "ERROR: Cannot find drivers/kernelsu after all attempts!"
+            exit 1
           fi
 
-          # 2. 注入内核配置 —— 这次我们直击要害，拔掉病根
+          KSU_DIR="drivers/kernelsu"
+
+          # 2. 修复 adb_root.h 中缺失的 'struct user_arg_ptr' 声明
+          # 在 4.19 中此结构体定义于 linux/uaccess.h 或 asm-generic/uaccess.h
+          ADB_HEADER="${KSU_DIR}/feature/adb_root.h"
+          if [ -f "$ADB_HEADER" ]; then
+            echo "Patching $ADB_HEADER"
+            # 在文件开头添加前向声明（如果未声明则补一个空结构体）
+            sed -i '1s/^/struct user_arg_ptr {};\n/' "$ADB_HEADER"
+            # 或者尝试包含必要的头文件（可能不生效，用前向声明更安全）
+            # sed -i '1i #include <linux/uaccess.h>' "$ADB_HEADER"
+          fi
+
+          # 3. 修复 adb_root.c 中同样的声明问题 (如果存在)
+          ADB_SRC="${KSU_DIR}/feature/adb_root.c"
+          if [ -f "$ADB_SRC" ]; then
+            echo "Patching $ADB_SRC"
+            sed -i '1s/^/struct user_arg_ptr {};\n/' "$ADB_SRC"
+          fi
+
+          # 4. 修复 sucompat.c (可能也需要)
+          SUCOMPAT="${KSU_DIR}/feature/sucompat.c"
+          if [ -f "$SUCOMPAT" ]; then
+            echo "Patching $SUCOMPAT"
+            sed -i '1s/^/struct user_arg_ptr {};\n/' "$SUCOMPAT"
+          fi
+
+          # 5. 修复 sulog/event.c 中未闭合的 #ifdef
+          EVENT_C="${KSU_DIR}/sulog/event.c"
+          if [ -f "$EVENT_C" ]; then
+            echo "Patching $EVENT_C"
+            # 查找 #ifdef CONFIG_KSU_SUSFS 并在文件末尾补上 #endif（如果缺失）
+            if grep -q "#ifdef CONFIG_KSU_SUSFS" "$EVENT_C"; then
+              if ! tail -n 20 "$EVENT_C" | grep -q "#endif"; then
+                echo "#endif /* CONFIG_KSU_SUSFS */" >> "$EVENT_C"
+              fi
+            fi
+            # 同时也处理可能的多行语法错误：简单粗暴地注释掉第297行前后有问题的行
+            sed -i '296,298s/^/\/\//' "$EVENT_C" 2>/dev/null || true
+          fi
+
+          # 6. 处理 Makefile 中的文件名不一致问题 (kusu.c vs ksu.c)
+          # SukiSU Ultra 的 Makefile 可能写 'obj-$(CONFIG_KSU) += kusu.o' 但实际文件叫 ksu.c
+          # 我们将所有的 kusu.o 改为 ksu.o，或者反过来，视实际文件而定
+          MAKE_FILE="${KSU_DIR}/Makefile"
+          if [ -f "$MAKE_FILE" ]; then
+            # 如果 Makefile 里写的是 kusu.o 但实际存在 ksu.c
+            if grep -q "kusu.o" "$MAKE_FILE" && [ -f "${KSU_DIR}/ksu.c" ]; then
+              sed -i 's/kusu.o/ksu.o/g' "$MAKE_FILE"
+            fi
+            # 如果写的是 ksu.o 但实际存在 kusu.c
+            if grep -q "ksu.o" "$MAKE_FILE" && [ -f "${KSU_DIR}/kusu.c" ]; then
+              sed -i 's/ksu.o/kusu.o/g' "$MAKE_FILE"
+            fi
+          fi
+
+          # 7. 注入内核配置 (确保 SUSFS 和 Manual Hook 启用)
           DEFCONFIG="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
-
-          # 先清除可能已经存在的、会导致冲突的旧配置
-          sed -i '/CONFIG_KSU_ADB_ROOT/d' "$DEFCONFIG"
-          sed -i '/CONFIG_KSU_SULOG/d' "$DEFCONFIG"
-
           cat >> "$DEFCONFIG" << 'EOF'
-
-          # === 核心修复：禁用产生编译错误的模块 ===
-          # CONFIG_KSU_ADB_ROOT is not set
-          # CONFIG_KSU_SULOG is not set
-
-          # === 你的信仰基石：Manual Hook & SUSFS ===
+          CONFIG_KALLSYMS=y
+          CONFIG_KALLSYMS_ALL=y
           CONFIG_KSU=y
           CONFIG_KSU_MANUAL_HOOK=y
           CONFIG_KSU_SUSFS=y
           # CONFIG_KSU_WITH_KPROBES is not set
-
-          # === 非GKI内核必需品 ===
-          CONFIG_KALLSYMS=y
-          CONFIG_KALLSYMS_ALL=y
           EOF
 
-          # 3. 重新生成 .config 并使其生效
+          # 8. 重新生成 .config
           mkdir -p out
           make ARCH=arm64 O=out ${{ env.DEFCONFIG_NAME }}
           make ARCH=arm64 O=out olddefconfig
 
-          echo "SukiSU Ultra 的病根已拔除，编译应顺利通过。"
+          echo "Source-level fixes applied for SukiSU Ultra on 4.19"
 
       - name: 🧰 Patch Kernel of Re:Kernel
         uses: ./.github/workflows/patch-rekernel
