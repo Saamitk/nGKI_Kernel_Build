@@ -52,7 +52,7 @@ runs:
           fi
 
           if [[ -f "$IMAGE_DIR/dtb.img" ]]; then
-            cp -fp $IMAGE_DIR/dtb.img tmp
+            cp -fp $IMAGE_DIR/dtb.img tmp/dtb
             echo "Found dtb.img !"
           else
             echo "Doesn't found dtb.img! Your device maybe needn't the file."
