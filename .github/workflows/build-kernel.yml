@@ -30,3 +30,18 @@ jobs:
       fail-fast: true
     uses: ./.github/workflows/build-nothing-phone-1-evox-a16-qpr2.yml
     secrets: inherit  
+  
+  # OnePlus
+  build-oneplus-nord-ce-3-5g-lineageos23-a16:
+    name: "OnePlus Nord CE 3 5G (LineageOS 23 A16 QPR2)"
+    strategy:
+      fail-fast: true
+    uses: ./.github/workflows/build-oneplus-nord-ce-3-5g-lineageos23-a16.yml
+    secrets: inherit
+
+  build-oneplus-8-series-oos13-a13-xtd:
+    name: "Oneplus 8 Series (ColorOS 13 A13 XTD)"
+    strategy:
+      fail-fast: true
+    uses: ./.github/workflows/build-oneplus-8-series-oos13-a13-xtd.yml
+    secrets: inherit
