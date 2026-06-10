@@ -1,4 +1,4 @@
-Name: Build Miatoll Kernel (KSU + SUSFS)
+name: Build Miatoll Kernel (KSU + SUSFS)
 
 on:
   workflow_call:
@@ -33,7 +33,7 @@ env:
   KERNELSU_BRANCH : ""
 
   KERNELSU_AUTO_GET : "true"
-  KERNELSU_AUTO_FORK : "next" # Sets up KernelSU Next seamlessly
+  KERNELSU_AUTO_FORK : "next"
 
   SUSFS_ENABLE : true
   SUSFS_FIXED : true
@@ -135,3 +135,4 @@ jobs:
 
       - name: ✏️ Upload Artifacts
         uses: ./.github/workflows/upload-files
+        
