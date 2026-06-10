@@ -9,12 +9,31 @@ on:
 
 jobs:
   # Xiaomi
-  build-poco-x5-5g-lineageos23-a16:
-    name: "Build POCO X5 5G (LineageOS 23.2 A16)"
-    strategy:
-      fail-fast: true
-    uses: ./.github/workflows/build-poco-x5-5g-lineageos23-a16.yml
-    secrets: inherit
+  name: Build Miatoll Kernel (KSU + SUSFS)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Builder
+        uses: actions/checkout@v4
+
+      - name: Run nGKI Build Core
+        uses: cyberc3dr/nGKI_Kernel_Build@main
+        with:
+          kernel_source: "https://github.com/RiteshSahany/kernel_xiaomi_sm6250"
+          kernel_branch: "14"
+          kernel_config: "vendor/miatoll_defconfig"
+          kernel_image_name: "Image.gz-dtb"
+          clang_branch: "master-kernel-build-2024"
+          clang_version: "r522817"
+          enable_ksu: "true"
+          enable_susfs: "true"
+          susfs_version: "v1.4.1"
+
 
   # Nothing
   build-nothing-phone-1-lineageos23-a16:
