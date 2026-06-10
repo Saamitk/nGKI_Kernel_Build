@@ -15,7 +15,8 @@ env:
   KERNEL_SOURCE : "https://github.com/RiteshSahany/kernel_xiaomi_sm6250"
   KERNEL_BRANCH : "14"
 
-  CLANG_SOURCE : "https://github.com/cyberc3dr/clang_mirror/releases/download/clang-r547379/clang-r547379.tar.gz"
+  # Downgraded to 2024 AOSP stable Clang mirror to stop compile/fetch failures on 4.14 legacy code
+  CLANG_SOURCE : "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/master-kernel-build-2024/clang-r522817.tar.gz"
   CLANG_BRANCH : ""
 
   GCC_GNU : false
@@ -36,7 +37,7 @@ env:
   KERNELSU_AUTO_FORK : "next"
 
   SUSFS_ENABLE : true
-  SUSFS_FIXED : true
+  SUSFS_FIXED : false
 
   AK3_SOURCE : "https://github.com/osm0sis/AnyKernel3.git"
   AK3_BRANCH : "master"
@@ -48,45 +49,32 @@ env:
 
   ROM_TEXT : "clover_a16"
 
-  # Other env
   PYTHON_VERSION: "3"
-
   PACK_METHOD: "Anykernel3"
   PACK_KMODULES: "false"
-
   KERNELSU_METHOD: "shell"
 
-  PATCHES_SOURCE: "cyberc3dr/NonGKI_Kernel_Patches"
-  PATCHES_BRANCH: "mi_kernel"
+  PATCHES_SOURCE: "" 
+  PATCHES_BRANCH: "" 
 
   SUSFS_FOLDER_FIXED: ""
   SUSFS_PATCH_FIXED: ""
-
   REKERNEL_ENABLE: "false"
-
   HOOK_METHOD: "syscall"
-
   KERNEL_PATCH: "false"
-
   KPM_ENABLE: "false"
   KPM_INLINE: "false"
   KPM_KPATCH_NEXT: "false"
   KPM_PATCH_SOURCE: ""
-
   BASEBAND_GUARD_ENABLE: "false"
   BASEBAND_GUARD_BOOT: "false"
-
   HIDE_STUFF: "false"
-
   GENERATE_DTB: "false"
   GENERATE_CHIP: "qcom"
-
   BUILD_DEBUGGER: "false"
   SKIP_PATCH: "false"
-
   BUILD_OTHER_CONFIG: "false"
   MERGE_CONFIG_FILES: ""
-
   FREE_MORE_SPACE: "false"
 
 jobs:
@@ -135,4 +123,3 @@ jobs:
 
       - name: ✏️ Upload Artifacts
         uses: ./.github/workflows/upload-files
-        
