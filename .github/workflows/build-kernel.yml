@@ -1,4 +1,4 @@
-name: Build Miatoll Kernel (KSU + SUSFS)
+name: Build Miatoll Kernel (A16 KSU + SUSFS)
 
 on:
   workflow_dispatch:
@@ -13,13 +13,13 @@ jobs:
       - name: Run nGKI Build Core
         uses: cyberc3dr/nGKI_Kernel_Build@main
         with:
-          kernel_source: "https://github.com/RiteshSahany/kernel_xiaomi_sm6250"
-          kernel_branch: "14"
-          kernel_config: "vendor/miatoll_defconfig"
+          kernel_source: "https://github.com/crdroidandroid/android_kernel_xiaomi_sm6250"
+          kernel_branch: "16.0"
+          kernel_config: "miatoll_defconfig"
           kernel_image_name: "Image.gz-dtb"
           clang_branch: "master-kernel-build-2024"
           clang_version: "r522817"
           enable_ksu: "true"
           enable_susfs: "true"
-          susfs_version: "v1.4.1"
+          susfs_version: "v1.4.2"
           
